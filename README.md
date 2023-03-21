@@ -1,7 +1,5 @@
 # Public CTF Tasks
 
----
-
 CTFs:
 
 * [2023](/2023)
