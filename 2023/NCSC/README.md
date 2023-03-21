@@ -361,7 +361,7 @@ op = b'' # bytecode
 print('\n'.join([str(i) + "- " + inv[op[i]] + " " + str(op[i+1]) for i in range(0, len(op)-1, 2) if inv.get(op[i])]))
 ```
 
-The shortest bytecode & arguments I reached are the following:
+I won't be going into the details for this however, you can check the list of opcodes [here](https://docs.python.org/3.9/library/dis.html). The shortest bytecode & arguments I reached are the following:
 
 ```python
 opcode = "g\\x00j\\x00j\\x01\\xa0\\x02\\xa1\\x00}\\x00" + \
