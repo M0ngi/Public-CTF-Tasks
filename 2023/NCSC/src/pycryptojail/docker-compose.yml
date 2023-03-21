@@ -1,0 +1,8 @@
+
+version: '2.4'
+services:
+  oojail:
+    build: .
+    ports:
+      - 4010:1337
+    read_only: true

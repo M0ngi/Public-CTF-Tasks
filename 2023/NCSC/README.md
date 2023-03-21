@@ -7,11 +7,18 @@ This is going to be a writeup for the following challenges:
 * [PyCryptoJail](#PyCryptoJail) (PyJail)
 * [Formatter Specialist](#formatter-specialist) (Pwn)
 
+For the challenge files & solvers:
+* [ObjectOrientedJail](/2023/NCSC/src/objectorientedjail)
+* [PyCryptoJail](/2023/NCSC/src/pycryptojail)
+* [Formatter Specialist](/2023/NCSC/src/formatterspecialist)
+
+---
+
 ### ObjectOrientedJail
-    WIP
+WIP
 
 ### PyCryptoJail
-    WIP
+WIP
 
 ### Formatter Specialist
-    WIP
+WIP

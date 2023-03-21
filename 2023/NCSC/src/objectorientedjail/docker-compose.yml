@@ -1,0 +1,9 @@
+
+version: '2.4'
+services:
+  oojail:
+    build: .
+    ports:
+      - 4009:5000
+    read_only: true
+    privileged: true
