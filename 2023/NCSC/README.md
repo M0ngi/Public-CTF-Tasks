@@ -380,7 +380,77 @@ args = "(1,0,0,6,4,0,b'%s',(0,104,121,122,118,'.py','/usr/lib/python3.10','sh'),
 At this point, it's done! You can import os & pop a shell!
 
 ### PyCryptoJail
-WIP
+This one was a lil mix between Crypto & a Pyjail, basically there are 2 steps for this:
+1. Figure out the payload for the jail
+2. Calculate the needed `p` & `x` to get your payload recovered.
+
+For the Crypto part, credits goes to SSONEDE.
+
+We'll start with the jail part. Now, usually people look only at the `exec` or `eval` functions & ignore the rest of the code, which is a waste of some good opportunities. In the challenge file, this is the execution part of the jail (After blacklist/whitelist checks):
+
+```python
+exec(c)
+print(c)
+print("Is that everything?!")
+```
+
+The key to this challenge is the `print` called after the `exec`. One might think that it'll simply print out our payload **but** what if the `exec` changes the value of it? That's the main idea for the challenge.
+
+In the challenge description, we were told that the flag is saved in a file named "flag". Also, we were told that we are running python version 3.10
+
+Considering the version part, I realized that it's not really important while I'm writing this. However, the flag file part tells us that we might need to open the flag file & read it's content.
+
+In the blacklist, the "flag" part can be bypassed easly by using `"fl\\141g"` as example. Both `open` & `read` are not blacklisted so, we can open the file & read it's content using
+
+```python
+open('fl\\141g').read()
+```
+
+You might say, `.` is blacklisted! Yep it's, however, `getattr` isn't. The above payload can be changed to
+
+```python
+getattr(open('fl\\141g'),"read")()
+```
+
+And that's 33 chars long. Our limit is 38 (Line #46 in [main.py](/2023/NCSC/src/pycryptojail/main.py))
+
+Now, how can we print that out? We don't! We already have a print ready for us! The first solver I wrote for this was using the `:=` operator which was added in Python 3.10 version:
+
+```python
+[c:=getattr(open('fl\\141g'),"read")()]
+```
+
+However, while writing this I figured out that we don't really need to use a list there. I missed this check! A shorter payload is
+
+```python
+c=getattr(open('fl\\141g'),"read")()
+```
+
+Which is 35 chars. 
+
+Now the crypto part, I won't be going into details but the solution for this have a 50% chance of success since it requires `e` (randomly generated) to be odd.
+
+Solver for the full challenge:
+
+```python
+from Crypto.Util.number import bytes_to_long
+from pwn import *
+from sympy import nextprime
+
+r = process(["python3.10", "main.py"])
+
+payload = b"c=getattr(open('fl\\141g'),'read')()#" + b"a"*50
+payload = bytes_to_long(payload)
+payload = nextprime(payload)
+
+p = payload
+x = payload-1
+
+r.sendline(str(x))
+r.sendline(str(p))
+
+r.interactive()
+```
 
 ### Formatter Specialist
 WIP

