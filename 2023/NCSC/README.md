@@ -384,7 +384,7 @@ This one was a lil mix between Crypto & a Pyjail, basically there are 2 steps fo
 1. Figure out the payload for the jail
 2. Calculate the needed `p` & `x` to get your payload recovered.
 
-For the Crypto part, credits goes to SSONEDE.
+For the Crypto part, credits goes to [SSONEDE](https://www.linkedin.com/in/yassine-belarbi-853303208/).
 
 We'll start with the jail part. Now, usually people look only at the `exec` or `eval` functions & ignore the rest of the code, which is a waste of some good opportunities. In the challenge file, this is the execution part of the jail (After blacklist/whitelist checks):
 
